@@ -1,0 +1,130 @@
+name: ddbs-cdn
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports: ["5672:5672", "15672:15672"]
+    networks: [cdn-net]
+
+  origin:
+    build:
+      context: .
+      dockerfile: services/origin/Dockerfile
+    environment:
+      PORT: 3001
+      REPLICATION_URL: http://replication:3005
+    ports: ["3001:3001"]
+    volumes: [origin-data:/app/services/origin/data, origin-store:/app/services/origin/store]
+    networks: [cdn-net]
+    depends_on: [replication]
+
+  edge-us:
+    build:
+      context: .
+      dockerfile: services/edge/Dockerfile
+    environment:
+      PORT: 3002
+      REGION: us
+      ORIGIN_URL: http://origin:3001
+      ANALYTICS_URL: http://analytics:3007
+      TTL_DEFAULT_MS: 60000
+      LRU_MAX: 500
+    ports: ["3002:3002"]
+    networks: [cdn-net]
+    depends_on: [origin, analytics]
+
+  edge-eu:
+    build:
+      context: .
+      dockerfile: services/edge/Dockerfile
+    environment:
+      PORT: 3003
+      REGION: eu
+      ORIGIN_URL: http://origin:3001
+      ANALYTICS_URL: http://analytics:3007
+      TTL_DEFAULT_MS: 60000
+      LRU_MAX: 500
+    ports: ["3003:3003"]
+    networks: [cdn-net]
+    depends_on: [origin, analytics]
+
+  edge-asia:
+    build:
+      context: .
+      dockerfile: services/edge/Dockerfile
+    environment:
+      PORT: 3004
+      REGION: asia
+      ORIGIN_URL: http://origin:3001
+      ANALYTICS_URL: http://analytics:3007
+      TTL_DEFAULT_MS: 60000
+      LRU_MAX: 500
+    ports: ["3004:3004"]
+    networks: [cdn-net]
+    depends_on: [origin, analytics]
+
+  replication:
+    build:
+      context: .
+      dockerfile: services/replication/Dockerfile
+    environment:
+      PORT: 3005
+      ORIGIN_URL: http://origin:3001
+      EDGES: http://edge-us:3002,http://edge-eu:3003,http://edge-asia:3004
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REPLICATION_MODE: eventual
+      REPLICATION_LAG_MS: 2000
+    ports: ["3005:3005"]
+    networks: [cdn-net]
+    depends_on: [rabbitmq, origin]
+
+  coordinator:
+    build:
+      context: .
+      dockerfile: services/coordinator/Dockerfile
+    environment:
+      PORT: 3006
+      ORIGIN_URL: http://origin:3001
+      EDGES: http://edge-us:3002,http://edge-eu:3003,http://edge-asia:3004
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    ports: ["3006:3006"]
+    networks: [cdn-net]
+    depends_on: [rabbitmq]
+
+  analytics:
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    ports: ["3007:3007"]
+    volumes: [analytics-data:/app/services/analytics/data]
+    networks: [cdn-net]
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    environment:
+      PORT: 3000
+      EDGE_US_URL: http://edge-us:3002
+      EDGE_EU_URL: http://edge-eu:3003
+      EDGE_ASIA_URL: http://edge-asia:3004
+      ORIGIN_URL: http://origin:3001
+      COORDINATOR_URL: http://coordinator:3006
+    ports: ["3000:3000"]
+    networks: [cdn-net]
+    depends_on: [edge-us, edge-eu, edge-asia, origin, coordinator]
+
+  dashboard:
+    build:
+      context: ./web/dashboard
+    ports: ["8080:80"]
+    networks: [cdn-net]
+    depends_on: [gateway]
+
+networks:
+  cdn-net:
+    driver: bridge
+
+volumes:
+  origin-data:
+  origin-store:
+  analytics-data:
