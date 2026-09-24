@@ -1,4 +1,4 @@
-# Content Delivery Network (CDN) — Microservices Simulation (Node.js)
+# Content Delivery Network (CDN) — Microservices Simulation 
 
 Simulated CDN: origin (authoritative) + 3 edge caches (US/EU/Asia) + replication (sync/async) + invalidation coordinator + analytics + gateway router + React dashboard. See `docs/ARCHITECTURE.md` and `docs/API.md`.
 
